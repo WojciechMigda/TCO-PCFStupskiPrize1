@@ -29,14 +29,15 @@ from __future__ import print_function
 #  2015-12-19   wm              Initial version
 #
 ################################################################################
-
 """
+
 from sys import path
 path.insert(0, './Pipe')
-from pipe import *
+#from pipe import *
+import pipe as P
 
 
-@Pipe
+@P.Pipe
 def as_csv_rows(fname):
     with open(fname, 'r') as csvfile:
         from csv import reader
@@ -46,7 +47,7 @@ def as_csv_rows(fname):
     return
 
 
-@Pipe
+@P.Pipe
 def as_image(seq):
     from skimage.io import imread
     for Id in seq:
@@ -54,7 +55,7 @@ def as_image(seq):
     return
 
 
-@Pipe
+@P.Pipe
 def as_float(seq):
     from skimage import img_as_float
     for im in seq:
@@ -71,15 +72,14 @@ def _take_layer(im, colorspace, indices):
     return
 
 
-@Pipe
+@P.Pipe
 def take_layer(seq, colorspace, indices):
     for im in seq:
         yield _take_layer(im, colorspace, indices)
 
 
-@Pipe
+@P.Pipe
 def take_layers(seq, selector):
-    from colorspaces import colorspace_layers_from_rgb
     from numpy import concatenate
     for im in seq:
         layers = [_take_layer(im, colorspace, indices) for colorspace, indices in selector.items()]
@@ -87,7 +87,7 @@ def take_layers(seq, selector):
     return
 
 
-@Pipe
+@P.Pipe
 def imshow(seq, title='image', cmap=None, layer_index=None):
     from matplotlib import pyplot as plt
     for im in seq:
@@ -117,11 +117,11 @@ def imshow(seq, title='image', cmap=None, layer_index=None):
                 plt.show()
                 pass
             pass
-        pass
+        yield im
     return
 
 
-@Pipe
+@P.Pipe
 def equalize(seq):
     from skimage import exposure
     for im in seq:
@@ -132,29 +132,100 @@ def equalize(seq):
     return
 
 
-@Pipe
-def as_poi(seq):
+@P.Pipe
+def attach_poi(seq):
+    # circle mask shape for maximum_filter
+    from skimage.draw import circle
+    FOOTPRINT_RADIUS = 2.5
+    cxy = circle(4, 4, FOOTPRINT_RADIUS)
+    from numpy import zeros
+    cc = zeros((9, 9), dtype=int)
+    cc[cxy] = 1
+    print(cc)
+
+    from skimage.feature import peak_local_max
+    MIN_DIST = 8
+    THR_ABS = 0.7
+    NUM_PEAKS = 40000
+
+    #from numpy import concatenate
+
     for im in seq:
+        coordinates = [
+            peak_local_max(
+                im[:, :, layer],
+                min_distance=MIN_DIST,
+                footprint=cc,
+                threshold_abs=THR_ABS,
+                num_peaks=NUM_PEAKS) for layer in range(im.shape[2])]
+
+        yield im, coordinates
+    pass
+
+
+def lbp_histogram(im, poi, window):
+    from skimage.feature import local_binary_pattern
+    from numpy import where, histogram
+    from collections import Counter
+
+    w2 = window / 2
+    c = Counter()
+
+    for layer in range(im.shape[2]):
+        p = poi[layer]
+        p = p[where(
+            (p[:, 0] >= w2) &
+            (p[:, 0] < (im.shape[0] - w2)) &
+            (p[:, 1] >= w2) &
+            (p[:, 1] < (im.shape[1] - w2))
+            )
+            ]
+        print(str(p.shape[0]) + " pois")
+        radius = 2
+        n_points = 8 * radius
+        METHOD = 'uniform'
+
+        for cx, cy in p:
+            area = im[:, :, layer][cx - w2:cx + w2, cy - w2:cy + w2]
+            lbp = local_binary_pattern(area, n_points, radius, METHOD)
+            c.update(lbp.ravel())
+            pass
         pass
+    from numpy import array
+    hist = array(c.values(), dtype=float) / sum(c.values())
+    return hist
+
+
+@P.Pipe
+def as_lbp(seq, window):
+    for im, poi in seq:
+        hist = lbp_histogram(im, poi, window)
+        yield hist
     pass
 
 
 def main():
 
-    foo = (
+    features = (
         "../../data/training.csv"
         | as_csv_rows
-        | skip(1)
-        | take(1)
-        | select(lambda x: x[0])
+        #| P.skip(1)
+        #| P.take(2)
+        | P.select(lambda x: x[0])
         | as_image
         | as_float
-        #| take_layers({'HED': [0, 2], 'RGB': [1, 2]})
+        #| take_layers({'HED': [0, 2], 'RGB': [1]})
         | take_layer('HED', 0)
         | equalize
-        | imshow("H layer", 'gray')
+        #| imshow("H layer", 'gray')
+        | attach_poi
+        | as_lbp(24)
+        | P.as_list
         )
-    #print(next(foo, None))
+    #print(type(next(foo, None)))
+    from numpy import vstack
+    from numpy import savetxt
+    savetxt('lbp24_np50000.csv', vstack(features), delimiter=',')
 
     pass
 
