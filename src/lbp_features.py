@@ -10,10 +10,10 @@
 #
 ################################################################################
 #
-#  Filename: colorspaces.py
+#  Filename: lbp_features.py
 #
 #  Decription:
-#      Toy code / sandbox
+#      LBP histograms as features
 #
 #  Authors:
 #       Wojciech Migda
@@ -45,12 +45,11 @@ import pipe as P
 
 
 @P.Pipe
-def as_csv_rows(fname):
-    with open(fname, 'r') as csvfile:
-        from csv import reader
-        csvreader = reader(csvfile, delimiter=',')
-        for row in csvreader:
-            yield row
+def as_csv_rows(csvfile):
+    from csv import reader
+    csvreader = reader(csvfile, delimiter=',')
+    for row in csvreader:
+        yield row
     return
 
 
@@ -211,10 +210,10 @@ def as_lbp(seq, radius, window):
     pass
 
 
-def work(out_csv_file, max_n_pois, lbp_radius, lbp_patch_size):
+def work(in_csv_file, out_csv_file, max_n_pois, lbp_radius, lbp_patch_size):
 
     features = (
-        "../../data/training.csv"
+        in_csv_file
         | as_csv_rows
         #| P.skip(1)
         | P.take(2)
@@ -271,13 +270,17 @@ USAGE
         from argparse import ArgumentParser
         from argparse import RawDescriptionHelpFormatter
         from argparse import FileType
-        from sys import stdout
+        from sys import stdout,stdin
 
         # Setup argument parser
         parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
         #parser.add_argument("-D", "--data-dir",
         #    type=str, action='store', dest="data_dir", required=True,
         #    help="directory with input CSV files, BMP 'train' and 'test' subfolders, and where H5 will be stored")
+        parser.add_argument("-i", "--in-csv",
+            action='store', dest="in_csv_file", default=stdin,
+            type=FileType('r'),
+            help="input CSV file name")
         parser.add_argument("-o", "--out-csv",
             action='store', dest="out_csv_file", default=stdout,
             type=FileType('w'),
@@ -300,7 +303,8 @@ USAGE
             pass
 
 
-        work(args.out_csv_file,
+        work(args.in_csv_file,
+             args.out_csv_file,
              args.max_n_pois,
              args.lbp_radius,
              args.lbp_patch_size)
