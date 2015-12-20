@@ -170,7 +170,7 @@ def attach_poi(seq, num_peaks):
     pass
 
 
-def lbp_histogram(im, poi, window):
+def lbp_histogram(im, poi, radius, window):
     from skimage.feature import local_binary_pattern
     from numpy import where, histogram
     from collections import Counter
@@ -188,7 +188,7 @@ def lbp_histogram(im, poi, window):
             )
             ]
         print(str(p.shape[0]) + " pois")
-        radius = 2
+        #radius = 2
         n_points = 8 * radius
         METHOD = 'uniform'
 
@@ -204,14 +204,14 @@ def lbp_histogram(im, poi, window):
 
 
 @P.Pipe
-def as_lbp(seq, window):
+def as_lbp(seq, radius, window):
     for im, poi in seq:
-        hist = lbp_histogram(im, poi, window)
+        hist = lbp_histogram(im, poi, radius, window)
         yield hist
     pass
 
 
-def work(out_csv_file, max_n_pois, lbp_patch_size):
+def work(out_csv_file, max_n_pois, lbp_radius, lbp_patch_size):
 
     features = (
         "../../data/training.csv"
@@ -226,7 +226,7 @@ def work(out_csv_file, max_n_pois, lbp_patch_size):
         | equalize
         #| imshow("H layer", 'gray')
         | attach_poi(max_n_pois)
-        | as_lbp(lbp_patch_size)
+        | as_lbp(lbp_radius, lbp_patch_size)
         | P.as_list
         )
     #print(type(next(foo, None)))
@@ -282,9 +282,12 @@ USAGE
             action='store', dest="out_csv_file", default=stdout,
             type=FileType('w'),
             help="output CSV file name")
-        parser.add_argument("-p", "--lbp_patch-size",
+        parser.add_argument("-p", "--lbp-patch-size",
             type=int, default=24, action='store', dest="lbp_patch_size",
             help="size of square LBP patch collected over PoIs, in pixels")
+        parser.add_argument("-r", "--lbp-radius",
+            type=int, default=2, action='store', dest="lbp_radius",
+            help="LBP radius, in pixels (radius of local_binary_pattern)")
         parser.add_argument("-N", "--max-pois",
             type=int, default=5000, action='store', dest="max_n_pois",
             help="max number of PoIs to collect (num_peaks of peak_local_max)")
@@ -299,6 +302,7 @@ USAGE
 
         work(args.out_csv_file,
              args.max_n_pois,
+             args.lbp_radius,
              args.lbp_patch_size)
 
 
