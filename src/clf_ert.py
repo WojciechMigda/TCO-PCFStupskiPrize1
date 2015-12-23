@@ -41,15 +41,7 @@ from sys import path
 path.insert(0, './Pipe')
 import pipe as P
 
-
-@P.Pipe
-def as_csv_rows(fname):
-    with open(fname, 'r') as csvfile:
-        from csv import reader
-        csvreader = reader(csvfile, delimiter=',')
-        for row in csvreader:
-            yield row
-    return
+from pypipes import as_csv_rows
 
 
 def work(
