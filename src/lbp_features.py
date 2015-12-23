@@ -43,14 +43,7 @@ path.insert(0, './Pipe')
 #from pipe import *
 import pipe as P
 
-
-@P.Pipe
-def as_csv_rows(csvfile):
-    from csv import reader
-    csvreader = reader(csvfile, delimiter=',')
-    for row in csvreader:
-        yield row
-    return
+from pipelib import as_csv_rows
 
 
 @P.Pipe
@@ -216,7 +209,7 @@ def work(in_csv_file, out_csv_file, max_n_pois, lbp_radius, lbp_patch_size):
         in_csv_file
         | as_csv_rows
         #| P.skip(1)
-        | P.take(2)
+        #| P.take(2)
         | P.select(lambda x: x[0])
         | as_image
         | as_float
