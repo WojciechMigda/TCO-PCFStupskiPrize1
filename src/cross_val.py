@@ -45,7 +45,8 @@ def work(
         in_y_train_csv,
         in_train_feat_csv,
         seed,
-        n_est):
+        n_est,
+        n_folds):
 
     from pypipes import as_csv_rows
 
@@ -85,7 +86,7 @@ def work(
             yield result
         return
 
-    CVscore = sum(score_gen(10)) / 10
+    CVscore = sum(score_gen(n_folds)) / n_folds
     print("avg score:", CVscore)
     print("TCO score:", 1e9 / (1e5 * CVscore + 1.))
 
@@ -144,6 +145,10 @@ USAGE
             type=int, default=3000, action='store', dest="n_est",
             help="number of estimators for the regressor")
 
+        parser.add_argument("-k", "--n-folds",
+            type=int, default=10, action='store', dest="n_folds",
+            help="number of folds for cross-validation")
+
         parser.add_argument("-s", "--seed",
             type=int, default=1, action='store', dest="seed",
             help="random seed for estimator initialization")
@@ -160,7 +165,8 @@ USAGE
             args.in_y_train_csv,
             args.in_train_feat_csv,
             args.seed,
-            args.n_est)
+            args.n_est,
+            args.n_folds)
 
 
         return 0
