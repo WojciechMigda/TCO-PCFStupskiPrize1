@@ -10,7 +10,7 @@
 #
 ################################################################################
 #
-#  Filename: cell_patches.py
+#  Filename: cell_patches_kmeans.py
 #
 #  Decription:
 #      Cell patches from images (with KMeans)
@@ -44,235 +44,27 @@ sys_path.insert(0, './Pipe')
 import pipe as P
 
 
-@P.Pipe
-def as_csv_rows(csvfile):
-    from csv import reader
-    csvreader = reader(csvfile, delimiter=',')
-    for row in csvreader:
-        yield row
-    return
-
-
-@P.Pipe
-def as_wsimage(seq):
-    from skimage.io import imread
-    for Id in seq:
-        yield imread('../../data/DX/' + Id + '-DX.png')
-    return
-
-
-@P.Pipe
-def as_image(seq):
-    from skimage.io import imread
-    if type(seq) is str:
-        yield imread(seq)
-    for path in seq:
-        yield imread(path)
-    return
-
-
-@P.Pipe
-def as_float(seq):
-    from skimage import img_as_float
-    for im in seq:
-        yield img_as_float(im)
-    return
-
-
-def _take_layer(im, colorspace, indices):
-    from colorspaces import colorspace_layers_from_rgb
-    if type(indices) is int:
-        return colorspace_layers_from_rgb(im, colorspace)[:, :, [indices]]
-    else:
-        return colorspace_layers_from_rgb(im, colorspace)[:, :, indices]
-    return
-
-
-@P.Pipe
-def take_layer(seq, colorspace, indices):
-    for im in seq:
-        yield _take_layer(im, colorspace, indices)
-    return
-
-
-@P.Pipe
-def take_layers(seq, selector):
-    from numpy import concatenate
-    for im in seq:
-        layers = [_take_layer(im, colorspace, indices) for colorspace, indices in selector.items()]
-        yield concatenate(layers, axis=2)
-    return
-
-
-@P.Pipe
-def imshow(seq, title='image', cmap=None, layer_index=None):
-    from matplotlib import pyplot as plt
-    for im in seq:
-        if im.ndim == 2 or (im.ndim == 3 and im.shape[2] == 3):
-            fig, ax = plt.subplots(1, 1)
-            ax.set_title(title)
-            ax.imshow(im, interpolation='nearest', cmap=cmap)
-            plt.show()
-            pass
-        elif im.ndim == 3 and im.shape[2] == 1:
-            fig, ax = plt.subplots(1, 1)
-            ax.set_title(title)
-            ax.imshow(im[:, :, 0], interpolation='nearest', cmap=cmap)
-            plt.show()
-            pass
-        else:
-            if layer_index == None:
-                raise Exception('Missing layer_index')
-                pass
-            elif type(layer_index) != int:
-                raise Exception('layer_index must be int')
-                pass
-            else:
-                fig, ax = plt.subplots(1, 1)
-                ax.set_title(title)
-                ax.imshow(im[:, :, layer_index], interpolation='nearest', cmap=cmap)
-                plt.show()
-                pass
-            pass
-        yield im
-    return
-
-
-@P.Pipe
-def equalize(seq):
-    from skimage import exposure
-    for im in seq:
-        for layer in range(im.shape[2]):
-            im[:, :, layer] = exposure.equalize_hist(im[:, :, layer])
-            pass
-        yield im
-    return
-
-
-@P.Pipe
-def attach_poi(seq, num_peaks):
-    # circle mask shape for maximum_filter
+def pois(im, num_peaks, footprint_radius=2.5, min_dist=8, thr_abs=0.7):
     from skimage.draw import circle
-    FOOTPRINT_RADIUS = 2.5
+    FOOTPRINT_RADIUS = footprint_radius
     cxy = circle(4, 4, FOOTPRINT_RADIUS)
     from numpy import zeros
     cc = zeros((9, 9), dtype=int)
     cc[cxy] = 1
-    print(cc)
 
     from skimage.feature import peak_local_max
-    MIN_DIST = 8
-    THR_ABS = 0.7
-    #NUM_PEAKS = 40000
+    MIN_DIST = min_dist
+    THR_ABS = thr_abs
 
-    #from numpy import concatenate
+    coordinates = [
+        peak_local_max(
+            im[:, :, layer],
+            min_distance=MIN_DIST,
+            footprint=cc,
+            threshold_abs=THR_ABS,
+            num_peaks=num_peaks) for layer in range(im.shape[2])]
 
-    for im in seq:
-        coordinates = [
-            peak_local_max(
-                im[:, :, layer],
-                min_distance=MIN_DIST,
-                footprint=cc,
-                threshold_abs=THR_ABS,
-                num_peaks=num_peaks) for layer in range(im.shape[2])]
-
-        yield im, coordinates
-    return
-
-
-def lbp_histogram(im, poi, radius, window):
-    from skimage.feature import local_binary_pattern
-    from numpy import where, histogram
-    from collections import Counter
-
-    w2 = window / 2
-    c = Counter()
-
-    for layer in range(im.shape[2]):
-        p = poi[layer]
-        p = p[where(
-            (p[:, 0] >= w2) &
-            (p[:, 0] < (im.shape[0] - w2)) &
-            (p[:, 1] >= w2) &
-            (p[:, 1] < (im.shape[1] - w2))
-            )
-            ]
-        print(str(p.shape[0]) + " pois")
-        #radius = 2
-        n_points = 8 * radius
-        METHOD = 'uniform'
-
-        for cx, cy in p:
-            area = im[:, :, layer][cx - w2:cx + w2, cy - w2:cy + w2]
-            lbp = local_binary_pattern(area, n_points, radius, METHOD)
-            c.update(lbp.ravel())
-            pass
-        pass
-    from numpy import array
-    hist = array(c.values(), dtype=float) / sum(c.values())
-    return hist
-
-
-@P.Pipe
-def as_lbp(seq, radius, window):
-    for im, poi in seq:
-        hist = lbp_histogram(im, poi, radius, window)
-        yield hist
-    return
-
-
-@P.Pipe
-def resize(seq, shape):
-    from skimage.transform import resize
-    for im in seq:
-        yield resize(im, shape)
-    return
-
-
-@P.Pipe
-def as_density_map(seq, template):
-    from skimage.feature import match_template
-    for im in seq:
-        dmap = match_template(im, template, pad_input=True)
-        yield dmap
-    return
-
-
-@P.Pipe
-def time(seq):
-    from datetime import datetime
-    #from time import strftime
-    for item in seq:
-        print(datetime.now().strftime("%H:%M:%S.%f"))
-        yield item
-    return
-
-
-@P.Pipe
-def rescale(seq):
-    from skimage.exposure import rescale_intensity
-    for im in seq:
-        for layer in range(im.shape[2]):
-            im[:, :, layer] = rescale_intensity(im[:, :, layer])
-        yield im
-    return
-
-
-@P.Pipe
-def trim(seq, factor):
-    X = factor
-    for im in seq:
-        w, h = im.shape[:2]
-        yield im[w * X: w * (1. - X),  h * X: h * (1. - X), :]
-    return
-
-
-@P.Pipe
-def loopcount(seq):
-    for i,item in enumerate(seq):
-        print(i)
-        yield item
-    return
+    return coordinates
 
 
 @P.Pipe
@@ -294,18 +86,25 @@ def cluster(seq, nclust, window):
             print(str(p.shape[0]) + " pois")
             patches = array([im[cx - w2:cx + w2, cy - w2:cy + w2, layer].ravel() for cx, cy in p])
 
-            from sklearn.cluster import KMeans
-            clf = KMeans(n_clusters=nclust, random_state=1, n_jobs=4)
+            from sklearn.cluster import KMeans,MiniBatchKMeans
+            #clf = KMeans(n_clusters=nclust, random_state=1, n_jobs=4)
+            clf = MiniBatchKMeans(
+                n_clusters=nclust,
+                random_state=1,
+                batch_size=5000)
             clf.fit(patches)
 
 
             VISUALIZE = False
+            #VISUALIZE = True
             if VISUALIZE:
                 from matplotlib import pyplot as plt
                 fig, ax = plt.subplots(1, nclust, figsize=(8, 3), sharex=True, sharey=True, subplot_kw={'adjustable':'box-forced'})
                 for i in range(nclust):
                     ax[i].imshow(clf.cluster_centers_[i].reshape((window, window)),
-                                 interpolation='nearest', cmap=plt.cm.gray)
+                                 interpolation='nearest'
+                                 #, cmap=plt.cm.gray
+                                 )
                     ax[i].axis('off')
                     pass
                 fig.subplots_adjust(wspace=0.02, hspace=0.02, top=0.9,
@@ -322,22 +121,39 @@ def cluster(seq, nclust, window):
 
 def work(in_csv_file, out_csv_file, max_n_pois, npatches, patch_size):
 
+    from pypipes import as_csv_rows,iformat,loopcount,itime,iattach
+    from nppipes import itake,iexpand_dims
+    from skimagepipes import as_image,as_float,equalize_hist,imshow,trim,rgb_as_hed
+    from tcopipes import clean
+
     features = (
         in_csv_file
         | as_csv_rows
+
         #| P.skip(5)
-        #| P.take(2)
-        | P.select(lambda x: x[0])
-        | as_wsimage
+        #| P.take(4)
+
+        | itake(0)
+        | P.tee
+
+        | iformat('../../data/DX/{}-DX.png')
+        | as_image
+
+        | itime
         | loopcount
-        | time
-        | trim(0.15)
+
+        | trim(0.2)
         | as_float
-        | take_layer('HED', 0)
-        | equalize
-        #| imshow("H layer", 'gray')
-        #| time
-        | attach_poi(max_n_pois)
+        | clean
+
+        | rgb_as_hed
+        | itake(0, axis=2)
+        | iexpand_dims(axis=2)
+
+        | equalize_hist
+        #| imshow("H layer", cmap='gray')
+
+        | iattach(pois, max_n_pois)
         | cluster(npatches, patch_size)
         | P.as_list
         )
