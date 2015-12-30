@@ -10,10 +10,10 @@
 #
 ################################################################################
 #
-#  Filename: cell_patches_kmeans.py
+#  Filename: vq.py
 #
 #  Decription:
-#      Cell patches from images (with KMeans)
+#      Quantize images using codebook of cellular patches.
 #
 #  Authors:
 #       Wojciech Migda
@@ -67,16 +67,45 @@ def pois(im, num_peaks, footprint_radius=2.5, min_dist=8, thr_abs=0.7):
 
 
 @P.Pipe
-def vq(seq, codebook):
+def vq(seq, codebook, inv_cb, nclone):
+    def invariant_codebook(cb):
+        from numpy import array,rot90,fliplr
+        from math import sqrt
+
+        sidesz = int(sqrt(len(cb[0])))
+
+        codebook = []
+        base = [array(v) for v in cb]
+        for k in range(4):
+            rot = [rot90(array(a, copy=True).reshape((sidesz, sidesz)), k).ravel() for a in base]
+            codebook.append(array(rot))
+            flip = [fliplr(array(a, copy=True).reshape((sidesz, sidesz))).ravel() for a in rot]
+            codebook.append(array(flip))
+            pass
+        return codebook
+
+    def invariant_vq(feat, codebook):
+        from scipy.cluster.vq import vq
+        from numpy import array,argmin
+        matches = array([vq(feat, codebook[i]) for i in range(len(codebook))])
+        indices = argmin(matches, axis=0)[1, :]
+        result = [matches[j, 0, i] for i, j in enumerate(indices)]
+        return result
+
     from numpy import where,array,zeros
-    from scipy.cluster.vq import vq
+    #from scipy.cluster.vq import vq
     from collections import Counter
     from math import sqrt
 
     NS = len(codebook)
-    codebook = array(codebook)
-    window = int(sqrt(codebook.shape[1]))
+    window = int(sqrt(len(codebook[0])))
     w2 = window / 2
+
+    inv_codebook = invariant_codebook(codebook)
+    if not inv_cb:
+        # not really an efficient way to handle inv_cb, but hey! it works
+        inv_codebook = inv_codebook[:1]
+    #codebook = array(codebook)
 
     for im, pois in seq:
         for layer in range(im.shape[2]):
@@ -92,19 +121,22 @@ def vq(seq, codebook):
 
             patches = array([im[cx - w2:cx + w2, cy - w2:cy + w2, layer].ravel() for cx, cy in p])
 
-            vec, _ = vq(patches, codebook)
-            dist = Counter(vec)
-            freqs = zeros(NS, dtype=float)
-            for v, c in dist.items():
-                freqs[v] = float(c) / p.shape[0]
-                pass
+            for pslice in (patches[i::nclone, :] for i in range(nclone)):
+                vec = invariant_vq(pslice, inv_codebook)
+                dist = Counter(vec)
+                freqs = zeros(NS, dtype=float)
+                for v, c in dist.items():
+                    freqs[v] = float(c) / pslice.shape[0]
+                    pass
 
-            yield freqs
+                yield freqs
+
+            pass
         pass
     return
 
 
-def work(in_csv_file, in_codebook_csv_file, out_csv_file, max_n_pois):
+def work(in_csv_file, in_codebook_csv_file, out_csv_file, max_n_pois, inv_cb, nclone):
 
     from pypipes import as_csv_rows,iformat,loopcount,itime,iattach
     from nppipes import itake,iexpand_dims
@@ -142,7 +174,9 @@ def work(in_csv_file, in_codebook_csv_file, out_csv_file, max_n_pois):
         | vq(in_codebook_csv_file
              | as_csv_rows
              | P.select(lambda l: [float(x) for x in l])
-             | P.as_list)
+             | P.as_list,
+             inv_cb,
+             nclone)
 
         | P.as_list
         )
@@ -214,6 +248,13 @@ USAGE
         parser.add_argument("-N", "--max-pois",
             type=int, default=5000, action='store', dest="max_n_pois",
             help="max number of PoIs to collect (num_peaks of peak_local_max)")
+        parser.add_argument("-I", "--inv-codebook",
+            default=False, action='store_true', dest="inv_cb",
+            help="use transformation invariant codebook")
+        parser.add_argument("-X", "--sample-clone",
+            type=int, default=1, action='store', dest="nclone",
+            help="sample cloning factor")
+
 
         # Process arguments
         args = parser.parse_args()
@@ -227,6 +268,8 @@ USAGE
              args.in_cb_csv_file,
              args.out_csv_file,
              args.max_n_pois,
+             args.inv_cb,
+             args.nclone,
              )
 
 
