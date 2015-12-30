@@ -68,8 +68,9 @@ def pois(im, num_peaks, footprint_radius=2.5, min_dist=8, thr_abs=0.7):
 
 
 @P.Pipe
-def cluster(seq, nclust, window):
+def cluster(seq, nclust, window, with_polar):
     from numpy import where,array
+    from skimagepipes import cart2polar_
 
     w2 = window / 2
 
@@ -85,6 +86,9 @@ def cluster(seq, nclust, window):
                 ]
             print(str(p.shape[0]) + " pois")
             patches = array([im[cx - w2:cx + w2, cy - w2:cy + w2, layer].ravel() for cx, cy in p])
+            if with_polar:
+                patches = array([cart2polar_(im[cx - w2:cx + w2, cy - w2:cy + w2, layer]).ravel() for cx, cy in p])
+                pass
 
             from sklearn.cluster import KMeans,MiniBatchKMeans
             #clf = KMeans(n_clusters=nclust, random_state=1, n_jobs=4)
@@ -119,7 +123,7 @@ def cluster(seq, nclust, window):
     return
 
 
-def work(in_csv_file, out_csv_file, max_n_pois, npatches, patch_size):
+def work(in_csv_file, out_csv_file, max_n_pois, npatches, patch_size, with_polar):
 
     from pypipes import as_csv_rows,iformat,loopcount,itime,iattach
     from nppipes import itake,iexpand_dims
@@ -154,7 +158,7 @@ def work(in_csv_file, out_csv_file, max_n_pois, npatches, patch_size):
         #| imshow("H layer", cmap='gray')
 
         | iattach(pois, max_n_pois)
-        | cluster(npatches, patch_size)
+        | cluster(npatches, patch_size, with_polar)
         | P.as_list
         )
     #print(type(next(features, None)))
@@ -225,6 +229,9 @@ USAGE
         parser.add_argument("-N", "--max-pois",
             type=int, default=5000, action='store', dest="max_n_pois",
             help="max number of PoIs to collect (num_peaks of peak_local_max)")
+        parser.add_argument("-P", "--with-polar",
+            default=False, action='store_true', dest="with_polar",
+            help="convert patches to polar coordinates")
 
         # Process arguments
         args = parser.parse_args()
@@ -238,7 +245,8 @@ USAGE
              args.out_csv_file,
              args.max_n_pois,
              args.npatches,
-             args.patch_size)
+             args.patch_size,
+             args.with_polar)
 
 
         return 0
