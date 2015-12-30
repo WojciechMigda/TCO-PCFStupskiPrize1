@@ -41,8 +41,6 @@ from sys import path
 path.insert(0, './Pipe')
 import pipe as P
 
-from pypipes import as_csv_rows
-
 
 def work(
         in_y_train_csv,
@@ -51,13 +49,18 @@ def work(
         in_test_labels_csv,
         seed,
         n_est,
+        nclone,
         out_csv_file):
+
+    from pypipes import as_csv_rows
+    from nppipes import repeat
 
     y_train = (
         in_y_train_csv
         | as_csv_rows
         | P.select(lambda x: float(x[1]))
         | P.as_list
+        | repeat(nclone)
         )
     X_train = (
         in_train_feat_csv
@@ -160,6 +163,10 @@ USAGE
             type=int, default=1, action='store', dest="seed",
             help="random seed for estimator initialization")
 
+        parser.add_argument("-X", "--feat-clone",
+            type=int, default=1, action='store', dest="nclone",
+            help="feature cloning factor")
+
         # Process arguments
         args = parser.parse_args()
 
@@ -175,6 +182,7 @@ USAGE
             args.in_test_labels_csv,
             args.seed,
             args.n_est,
+            args.nclone,
             args.out_csv_file)
 
 
