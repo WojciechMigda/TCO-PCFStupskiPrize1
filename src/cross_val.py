@@ -46,15 +46,18 @@ def work(
         in_train_feat_csv,
         seed,
         n_est,
+        nclone,
         n_folds):
 
     from pypipes import as_csv_rows
+    from nppipes import repeat
 
     y_train = (
         in_y_train_csv
         | as_csv_rows
         | P.select(lambda x: float(x[1]))
         | P.as_list
+        | repeat(nclone)
         )
     X_train = (
         in_train_feat_csv
@@ -66,7 +69,13 @@ def work(
     from sklearn.ensemble import ExtraTreesRegressor
     SEED = seed
     NEST = n_est
-    clf = ExtraTreesRegressor(verbose=0, n_estimators=NEST, random_state=SEED, n_jobs=4)
+    clf = ExtraTreesRegressor(verbose=0,
+                              n_estimators=NEST,
+                              random_state=SEED,
+                              #max_features=0.5,
+                              #max_depth=10,
+                              #min_samples_leaf=5,
+                              n_jobs=4)
 
     def score_gen(n_folds):
         from sklearn.cross_validation import KFold
@@ -153,6 +162,10 @@ USAGE
             type=int, default=1, action='store', dest="seed",
             help="random seed for estimator initialization")
 
+        parser.add_argument("-X", "--feat-clone",
+            type=int, default=1, action='store', dest="nclone",
+            help="feature cloning factor")
+
         # Process arguments
         args = parser.parse_args()
 
@@ -166,6 +179,7 @@ USAGE
             args.in_train_feat_csv,
             args.seed,
             args.n_est,
+            args.nclone,
             args.n_folds)
 
 
