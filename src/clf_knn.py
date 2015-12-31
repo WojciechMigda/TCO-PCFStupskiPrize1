@@ -100,6 +100,7 @@ def work(
         clf = KNeighborsRegressor(
             n_neighbors=n_ngb,
             metric='pyfunc', func=hellinger,
+            #weights='distance'
             ) # 33=max@131
         pass
     else:
@@ -108,6 +109,7 @@ def work(
 
     clf.fit(X_train, y_train)
     y_test = clf.predict(X_test)
+    print("Score:", clf.score(X_train, y_train))
     from numpy import savetxt
     savetxt(out_csv_file, zip(test_labels, y_test), delimiter=',', fmt=['%d', '%f'])
 
