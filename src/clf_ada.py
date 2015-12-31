@@ -84,12 +84,14 @@ def work(
     from sklearn.ensemble import ExtraTreesRegressor
     ## 100 for ETR, 300 for ADA
     clf = AdaBoostRegressor(ExtraTreesRegressor(verbose=0,
-                              n_estimators=200,
+                              n_estimators=100,
                               random_state=SEED,
                               n_jobs=4),
-                          n_estimators=500, random_state=SEED)
+                          n_estimators=300, random_state=SEED)
 
     clf.fit(X_train, y_train)
+    #print("Score:", clf.score(X_train, y_train))
+    #print(zip(y_train, clf.predict(X_train)))
     y_test = clf.predict(X_test)
     from numpy import savetxt
     savetxt(out_csv_file, zip(test_labels, y_test), delimiter=',', fmt=['%d', '%f'])
