@@ -82,6 +82,7 @@ def work(
         clf = KNeighborsRegressor(
             n_neighbors=n_ngb,
             metric='pyfunc', func=hellinger,
+            #weights='distance'
             ) # 33=max@131
         pass
     else:
